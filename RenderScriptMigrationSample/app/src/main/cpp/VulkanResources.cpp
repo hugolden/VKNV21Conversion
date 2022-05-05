@@ -273,7 +273,7 @@ bool Image::createDeviceLocalNV21Image(VkImageUsageFlags usage) {
     bind_image_memory_plane1_info.memory = mMemory.handle();
     bind_image_memory_plane1_info.memoryOffset = memory_offset_plane1;
 
-    vkBindImageMemory2(mContext->device(), bind_image_memory_infos.size(), bind_image_memory_infos.data());
+    vkBindImageMemory2(mContext->device(), static_cast<uint32_t>(bind_image_memory_infos.size()), bind_image_memory_infos.data());
     return true;
 }
 
@@ -372,7 +372,7 @@ bool Image::setContentFromNV21Ptr(void *nv21ptr, uint32_t width, uint32_t height
     plane_regions[1].imageExtent = { width / 2, height / 2, 1 };
 
     vkCmdCopyBufferToImage(copyCommand.handle(), stagingBuffer->getBufferHandle(), mImage.handle(),
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, plane_regions.size(), plane_regions.data());
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, static_cast<uint32_t>(plane_regions.size()), plane_regions.data());
     RET_CHECK(mContext->endAndSubmitSingleTimeCommand(copyCommand.handle()));
 
     // Set layout to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL to prepare for input sampler usage
