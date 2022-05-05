@@ -56,6 +56,7 @@ class ImageProcessor {
     // Apply a filter to the input image and write the results to the indexed output image.
     bool rotateHue(float radian, int outputIndex);
     bool blur(float radius, int outputIndex);
+    bool convertNV21ToRGB(int outputIndex);
 
    private:
     // Return true on success, false if initialization failed.

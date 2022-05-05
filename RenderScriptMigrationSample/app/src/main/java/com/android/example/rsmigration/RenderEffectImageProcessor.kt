@@ -81,6 +81,15 @@ class RenderEffectImageProcessor : ImageProcessor {
         throw RuntimeException("Not configured!")
     }
 
+    override fun convertFromNV21(
+        input: ByteArray,
+        width: Int,
+        height: Int,
+        outputIndex: Int
+    ): Bitmap {
+        TODO("Not yet implemented")
+    }
+
     override fun cleanup() {
         params?.let {
             params = null

@@ -61,6 +61,7 @@ class VulkanImageProcessor(context: Context) : ImageProcessor {
         nv21Buffer: ByteArray,
         width:Int,
         height:Int,
+        outputIndex:Int,
     ): Boolean
 
     // Get the HardwareBuffer of the target output. This method must be invoked after
@@ -99,6 +100,17 @@ class VulkanImageProcessor(context: Context) : ImageProcessor {
 
     override fun blur(radius: Float, outputIndex: Int): Bitmap {
         val success = blur(mVulkanProcessor, radius, outputIndex)
+        if (!success) throw RuntimeException("Failed to blur")
+        return mOutputImages[outputIndex]
+    }
+
+    override fun convertFromNV21(
+        input: ByteArray,
+        width: Int,
+        height: Int,
+        outputIndex: Int
+    ): Bitmap {
+        val success = feedNV21Input(mVulkanProcessor, input,width,height, outputIndex)
         if (!success) throw RuntimeException("Failed to blur")
         return mOutputImages[outputIndex]
     }

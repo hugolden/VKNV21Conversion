@@ -246,6 +246,7 @@ bool ImageProcessor::rotateHue(float radian, int outputIndex) {
     return true;
 }
 
+
 bool ImageProcessor::blur(float radius, int outputIndex) {
     RET_CHECK(1.0f <= radius && radius <= 25.0f);
 
@@ -293,6 +294,29 @@ bool ImageProcessor::blur(float radius, int outputIndex) {
     // Second pass: apply a vertical gaussian blur.
     mBlurVerticalPipeline->recordComputeCommands(cmd, &iRadius, *mTempImage, *mStagingOutputImage,
                                                  mBlurUniformBuffer.get());
+
+    // Prepare for image copying from the staging image to the output image.
+    mStagingOutputImage->recordLayoutTransitionBarrier(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+    // Copy staging image to output image.
+    recordImageCopyingCommand(cmd, *mStagingOutputImage, *mOutputImages[outputIndex]);
+
+    // Submit to queue.
+    RET_CHECK(endAndSubmitCommandBuffer(cmd, mContext->queue()));
+    return true;
+}
+
+bool ImageProcessor::convertNV21ToRGB(int outputIndex) {
+    auto cmd = mCommandBuffer->handle();
+    RET_CHECK(beginOneTimeCommandBuffer(cmd));
+
+    // The storage image is used as an output storage image in the compute shader.
+    mStagingOutputImage->recordLayoutTransitionBarrier(cmd, VK_IMAGE_LAYOUT_GENERAL,
+            /*preserveData=*/false);
+
+    // Bind compute pipeline.
+    mNV21TransitionPipeline->recordComputeCommands(cmd, nullptr, *mInputImage,
+                                              *mStagingOutputImage);
 
     // Prepare for image copying from the staging image to the output image.
     mStagingOutputImage->recordLayoutTransitionBarrier(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);

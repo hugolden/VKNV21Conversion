@@ -39,6 +39,8 @@ interface ImageProcessor {
     // Apply gaussian blur to the input image. The radius must be within the range of [1.0, 25.0].
     fun blur(radius: Float, outputIndex: Int): Bitmap
 
+    fun convertFromNV21(input:ByteArray,width:Int,height:Int,outputIndex: Int):Bitmap
+
     // Frees up any underlying native resources. After calling this method, this image processor
     // can not be used in any way.
     fun cleanup()

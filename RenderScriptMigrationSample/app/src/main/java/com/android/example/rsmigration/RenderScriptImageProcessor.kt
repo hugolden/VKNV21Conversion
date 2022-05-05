@@ -152,5 +152,14 @@ class RenderScriptImageProcessor(context: Context, useIntrinsic: Boolean) : Imag
         return mOutputImages[outputIndex]
     }
 
+    override fun convertFromNV21(
+        input: ByteArray,
+        width: Int,
+        height: Int,
+        outputIndex: Int
+    ): Bitmap {
+        TODO("Not yet implemented")
+    }
+
     override fun cleanup() {}
 }

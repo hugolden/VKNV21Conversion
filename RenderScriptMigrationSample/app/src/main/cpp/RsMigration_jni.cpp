@@ -63,11 +63,14 @@ Java_com_android_example_rsmigration_VulkanImageProcessor_configureNV21InputAndO
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_android_example_rsmigration_VulkanImageProcessor_feedNV21Input(
         JNIEnv* env, jobject /* this */, jlong _processor, jbyteArray _inputArray,
-        jint width, jint height) {
+        jint width, jint height,jint outputIndex) {
     if (_processor == 0L) return false;
+    auto processor = castToImageProcessor(_processor);
     void* buffer = static_cast<void*>(env->GetByteArrayElements(_inputArray, nullptr));
-    return castToImageProcessor(_processor)
-            ->feedBuffer(buffer,width,height);
+    bool success = processor->feedBuffer(buffer,width,height) &&
+            processor->convertNV21ToRGB(outputIndex);
+    return success;
+
 }
 
 extern "C" JNIEXPORT jobject JNICALL
