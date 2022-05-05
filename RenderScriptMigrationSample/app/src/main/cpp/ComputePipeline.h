@@ -39,7 +39,8 @@ class ComputePipeline {
     static std::unique_ptr<ComputePipeline> create(const VulkanContext* context, const char* shader,
                                                    AAssetManager* assetManager,
                                                    uint32_t pushConstantSize,
-                                                   bool useUniformBuffer);
+                                                   bool useUniformBuffer,bool needYuvConversion = false);
+
 
     // Prefer ComputePipeline::create
     ComputePipeline(const VulkanContext* context, uint32_t pushConstantSize)
@@ -47,13 +48,20 @@ class ComputePipeline {
           mDescriptorSetLayout(context->device()),
           mPipelineLayout(context->device()),
           mPipeline(context->device()),
-          mPushConstantSize(pushConstantSize) {}
+          mPushConstantSize(pushConstantSize){}
+
+    virtual ~ComputePipeline();
 
     // Record the compute pipeline to the command buffer with the given uniform buffer and
     // input/output image.
     void recordComputeCommands(VkCommandBuffer cmd, const void* pushConstantData,
                                const Image& inputImage, const Image& outputImage,
                                const Buffer* uniformBuffer = nullptr);
+
+
+    VkSamplerYcbcrConversionInfo getConversion();
+
+    VkSampler getConversionSampler();
 
    protected:
     // Initialization
@@ -73,6 +81,14 @@ class ComputePipeline {
     VkDescriptorSet mDescriptorSet = VK_NULL_HANDLE;
     VulkanPipeline mPipeline;
     uint32_t mPushConstantSize;
+
+private:
+    bool isConversionPrepared;
+    VkSamplerYcbcrConversionInfo mYuvConversionInfo;
+    bool createYuvConversion();
+    bool createNV21Sampler();
+    VkSampler mNV21Sampler;
+
 };
 
 }  // namespace sample

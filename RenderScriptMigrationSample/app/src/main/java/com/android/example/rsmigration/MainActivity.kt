@@ -81,7 +81,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         // Load bitmap resources
-        mInputImage = loadBitmap(R.drawable.data)
+        mInputImage = loadBitmap(R.drawable.cliff)
 
         // Set up image processors
         val imageProcessors = mutableListOf(
@@ -274,27 +274,31 @@ class MainActivity : AppCompatActivity() {
         // Disable the widgets to ensure that during the benchmark:
         // - the setup {processor, filterMode, progress} will not change
         // - startUpdateImage will not be invoked
-        mSeekBar.isEnabled = false
-        mProcessorSpinner.isEnabled = false
-        mFilterSpinner.isEnabled = false
-        mBenchmarkButton.isEnabled = false
-        mLatencyTextView.setText(R.string.benchmark_running_text)
-
-        // Start a new thread to run benchmark without blocking the UI thread.
-        Thread {
-            synchronized(mLock) {
-                // Run benchmark.
-                val avgMs = runBenchmark(mCurrentProcessor, mFilterMode, mSeekBar.progress)
-
-                // Display benchmark result and re-enable widgets.
-                this@MainActivity.runOnUiThread {
-                    mLatencyTextView.text = getString(R.string.benchmark_result_text, avgMs)
-                    mSeekBar.isEnabled = true
-                    mProcessorSpinner.isEnabled = true
-                    mFilterSpinner.isEnabled = true
-                    mBenchmarkButton.isEnabled = true
-                }
-            }
-        }.start()
+//        mSeekBar.isEnabled = false
+//        mProcessorSpinner.isEnabled = false
+//        mFilterSpinner.isEnabled = false
+//        mBenchmarkButton.isEnabled = false
+//        mLatencyTextView.setText(R.string.benchmark_running_text)
+//
+//        // Start a new thread to run benchmark without blocking the UI thread.
+//        Thread {
+//            synchronized(mLock) {
+//                // Run benchmark.
+//                val avgMs = runBenchmark(mCurrentProcessor, mFilterMode, mSeekBar.progress)
+//
+//                // Display benchmark result and re-enable widgets.
+//                this@MainActivity.runOnUiThread {
+//                    mLatencyTextView.text = getString(R.string.benchmark_result_text, avgMs)
+//                    mSeekBar.isEnabled = true
+//                    mProcessorSpinner.isEnabled = true
+//                    mFilterSpinner.isEnabled = true
+//                    mBenchmarkButton.isEnabled = true
+//                }
+//            }
+//        }.start()
+        mInputImage = loadBitmap(R.drawable.cliff2)
+        mImageProcessors.forEach { processor ->
+            processor.configureInputAndOutput(mInputImage, NUMBER_OF_OUTPUT_IMAGES)
+        }
     }
 }

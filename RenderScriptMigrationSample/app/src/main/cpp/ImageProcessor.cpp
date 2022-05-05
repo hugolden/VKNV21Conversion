@@ -104,6 +104,11 @@ bool ImageProcessor::initialize(bool enableDebug, AAssetManager* assetManager) {
                                     sizeof(mRotateHueData), /*useUniformBuffer=*/false);
     RET_CHECK(mRotateHuePipeline != nullptr);
 
+    mNV21TransitionPipeline =
+            ComputePipeline::create(mContext.get(),"shaders/Nv21Converter.comp.spv",assetManager,
+                                    0,false,true);
+    RET_CHECK(mNV21TransitionPipeline != nullptr);
+
     // Create two compute pipelines for blur
     mBlurUniformBuffer = Buffer::create(
             mContext.get(), sizeof(mBlurData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -134,6 +139,47 @@ bool ImageProcessor::configureInputAndOutput(JNIEnv* env, jobject inputBitmap,
     RET_CHECK(mTempImage != nullptr);
 
     // Create staging output image
+    mStagingOutputImage =
+            Image::createDeviceLocal(mContext.get(), mInputImage->width(), mInputImage->height(),
+                                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    RET_CHECK(mStagingOutputImage != nullptr);
+
+    // Create output images backed by AHardwareBuffer
+    RET_CHECK(numberOfOutputImages > 0);
+    mOutputImages.resize(numberOfOutputImages);
+    for (int i = 0; i < numberOfOutputImages; i++) {
+        const AHardwareBuffer_Desc ahwbDesc = {
+                .width = mInputImage->width(),
+                .height = mInputImage->height(),
+                .layers = 1,
+                .format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM,
+                .usage = AHARDWAREBUFFER_USAGE_CPU_READ_NEVER |
+                         AHARDWAREBUFFER_USAGE_CPU_WRITE_NEVER |
+                         AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE,
+        };
+        AHardwareBuffer* buffer = nullptr;
+        RET_CHECK(AHardwareBuffer_allocate(&ahwbDesc, &buffer) == 0);
+        mOutputImages[i] = Image::createFromAHardwareBuffer(mContext.get(), buffer);
+        AHardwareBuffer_release(buffer);
+        RET_CHECK(mOutputImages[i] != nullptr);
+    }
+    return true;
+}
+
+bool ImageProcessor::configureInput(uint32_t width, uint32_t height){
+    mInputImage = Image::createFromNV21Buffer(mContext.get(),mNV21TransitionPipeline->getConversionSampler(),
+                                              mNV21TransitionPipeline->getConversion(),width,height);
+    RET_CHECK(mInputImage != nullptr);
+    LOGV("Input image width = %d, height = %d", mInputImage->width(), mInputImage->height());
+    return true;
+}
+
+bool ImageProcessor::feedBuffer(void* nv21ptr,uint32_t width, uint32_t  height){
+    RET_CHECK(mInputImage->feedImageViewWithBuffer(nv21ptr,width,height));
+    return true;
+}
+
+bool ImageProcessor::configureOutput(int numberOfOutputImages) {
     mStagingOutputImage =
             Image::createDeviceLocal(mContext.get(), mInputImage->width(), mInputImage->height(),
                                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);

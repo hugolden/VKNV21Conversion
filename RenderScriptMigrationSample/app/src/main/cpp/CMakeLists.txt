@@ -17,13 +17,22 @@
 cmake_minimum_required(VERSION 3.10.2)
 project(rs_migration_jni)
 
+add_compile_options(
+        -Wunused-variable
+        -Werror
+        -Wno-unused
+        -Wno-unused-parameter
+)
+
 add_library(rs_migration_jni
         SHARED
         RsMigration_jni.cpp
         ComputePipeline.cpp
         ImageProcessor.cpp
         VulkanContext.cpp
-        VulkanResources.cpp)
+        VulkanResources.cpp
+        NV21Converter.cpp
+        )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weverything -Werror")

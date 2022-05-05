@@ -50,6 +50,26 @@ Java_com_android_example_rsmigration_VulkanImageProcessor_configureInputAndOutpu
             ->configureInputAndOutput(env, _inputBitmap, _numberOfOutputImages);
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_android_example_rsmigration_VulkanImageProcessor_configureNV21InputAndOutput(
+        JNIEnv* env, jobject /* this */, jlong _processor,
+        jint width, jint height, jint _numberOfOutputImages) {
+    if (_processor == 0L) return false;
+    auto processor = castToImageProcessor(_processor);
+    bool success = processor->configureInput(width,height) && processor->configureOutput(_numberOfOutputImages);
+    return success;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_android_example_rsmigration_VulkanImageProcessor_feedNV21Input(
+        JNIEnv* env, jobject /* this */, jlong _processor, jbyteArray _inputArray,
+        jint width, jint height) {
+    if (_processor == 0L) return false;
+    void* buffer = static_cast<void*>(env->GetByteArrayElements(_inputArray, nullptr));
+    return castToImageProcessor(_processor)
+            ->feedBuffer(buffer,width,height);
+}
+
 extern "C" JNIEXPORT jobject JNICALL
 Java_com_android_example_rsmigration_VulkanImageProcessor_getOutputHardwareBuffer(
         JNIEnv* env, jobject /* this */, jlong _processor, jint _index) {

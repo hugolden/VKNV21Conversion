@@ -42,6 +42,12 @@ class ImageProcessor {
     // Create the input image from bitmap and allocate output images backed by AHardwareBuffers.
     bool configureInputAndOutput(JNIEnv* env, jobject inputBitmap, int numberOfOutputImages);
 
+    bool configureInput(uint32_t width, uint32_t height);
+
+    bool feedBuffer(void *nv21ptr, uint32_t width, uint32_t height);
+
+    bool configureOutput(int numberOfOutputImages);
+
     // Get the managed AHardwareBuffer of the target output.
     AHardwareBuffer* getOutputAHardwareBuffer(int index) {
         return mOutputImages[index]->getAHardwareBuffer();
@@ -74,6 +80,8 @@ class ImageProcessor {
     } mRotateHueData;
     std::unique_ptr<ComputePipeline> mRotateHuePipeline;
 
+    std::unique_ptr<ComputePipeline> mNV21TransitionPipeline;
+
     // Compute pipelines and uniform buffer for blur
     struct {
         // A float array of length 52.
@@ -82,6 +90,7 @@ class ImageProcessor {
     std::unique_ptr<Buffer> mBlurUniformBuffer;
     std::unique_ptr<ComputePipeline> mBlurHorizontalPipeline;
     std::unique_ptr<ComputePipeline> mBlurVerticalPipeline;
+
 };
 
 }  // namespace sample

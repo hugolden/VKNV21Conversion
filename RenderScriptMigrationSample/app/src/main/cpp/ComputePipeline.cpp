@@ -55,15 +55,125 @@ bool createShaderModuleFromAsset(VkDevice device, const char* shaderFilePath,
 
 }  // namespace
 
+ComputePipeline::~ComputePipeline() {
+//    if(isConversionPrepared){
+//        vkDestroySampler(mContext->device(),mNV21Sampler, nullptr);
+//        isConversionPrepared = false;
+//    }
+}
+
 std::unique_ptr<ComputePipeline> ComputePipeline::create(const VulkanContext* context,
                                                          const char* shader,
                                                          AAssetManager* assetManager,
                                                          uint32_t pushConstantSize,
-                                                         bool useUniformBuffer) {
+                                                         bool useUniformBuffer, bool needYuvConversion) {
+
     auto pipeline = std::make_unique<ComputePipeline>(context, pushConstantSize);
+    pipeline->isConversionPrepared = false;
+    if(needYuvConversion){
+        bool success = pipeline->createYuvConversion() &&
+                pipeline->createNV21Sampler();
+        if(!success){
+            return nullptr;
+        }
+        pipeline->isConversionPrepared = true;
+    }
+
     const bool success = pipeline->createDescriptorSet(useUniformBuffer) &&
                          pipeline->createComputePipeline(shader, assetManager);
     return success ? std::move(pipeline) : nullptr;
+}
+
+bool ComputePipeline::createYuvConversion() {
+
+    VkSamplerYcbcrConversionCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO ,
+            .pNext = nullptr
+    };
+
+    // Which 3x3 YUV to RGB matrix is used?
+    // 601 is generally used for SD content.
+    // 709 for HD content.
+    // 2020 for UHD content.
+    // Can also use IDENTITY which lets you sample the raw YUV and
+    // do the conversion in shader code.
+    // At least you don't have to hit the texture unit 3 times.
+    info.ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
+
+    // TV (NARROW) or PC (FULL) range for YUV?
+    // Usually, JPEG uses full range and broadcast content is narrow.
+    // If using narrow, the YUV components need to be
+    // rescaled before it can be converted.
+    info.ycbcrRange = VK_SAMPLER_YCBCR_RANGE_ITU_NARROW;
+
+    // Deal with order of components.
+    info.components = {
+            VK_COMPONENT_SWIZZLE_IDENTITY,
+            VK_COMPONENT_SWIZZLE_IDENTITY,
+            VK_COMPONENT_SWIZZLE_IDENTITY,
+            VK_COMPONENT_SWIZZLE_IDENTITY,
+    };
+
+    // With NEAREST, chroma is duplicated to a 2x2 block for YUV420p.
+    // In fancy video players, you might even get bicubic/sinc
+    // interpolation filters for chroma because why not ...
+    info.chromaFilter = VK_FILTER_LINEAR;
+
+    // COSITED or MIDPOINT? I think normal YUV420p content is MIDPOINT,
+    // but not quite sure ...
+    info.xChromaOffset = VK_CHROMA_LOCATION_MIDPOINT;
+    info.yChromaOffset = VK_CHROMA_LOCATION_MIDPOINT;
+
+    // Not sure what this is for.
+    info.forceExplicitReconstruction = VK_FALSE;
+
+    // For YUV420p.
+    info.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+
+    VkSamplerYcbcrConversion conversion;
+    CALL_VK(vkCreateSamplerYcbcrConversion,mContext->device(), &info, nullptr,
+            &conversion);
+
+    mYuvConversionInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO;
+    mYuvConversionInfo.pNext = nullptr;
+    mYuvConversionInfo.conversion = conversion;
+
+    return true;
+}
+
+VkSampler ComputePipeline::getConversionSampler() {
+    return mNV21Sampler;
+}
+
+VkSamplerYcbcrConversionInfo ComputePipeline::getConversion() {
+    return mYuvConversionInfo;
+}
+
+bool ComputePipeline::createNV21Sampler() {
+    const VkSamplerCreateInfo samplerCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .pNext = &mYuvConversionInfo,
+            .magFilter = VK_FILTER_NEAREST,
+            .minFilter = VK_FILTER_NEAREST,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+            // Use clamp to edge for BLUR filter
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = VK_FALSE,
+            .maxAnisotropy = 1,
+            .compareEnable = VK_FALSE,
+            .compareOp = VK_COMPARE_OP_NEVER,
+            .minLod = 0.0f,
+            .maxLod = 0.0f,
+            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+            // Use unnormalized coordinates to avoid the need of normalization
+            // when indexing into the texture
+            .unnormalizedCoordinates = VK_TRUE,
+    };
+    CALL_VK(vkCreateSampler, mContext->device(), &samplerCreateInfo, nullptr, &mNV21Sampler);
+    return true;
 }
 
 bool ComputePipeline::createDescriptorSet(bool useUniformBuffer) {
@@ -74,6 +184,7 @@ bool ComputePipeline::createDescriptorSet(bool useUniformBuffer) {
                     .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                     .descriptorCount = 1,
                     .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .pImmutableSamplers = isConversionPrepared? &mNV21Sampler : nullptr,
             },
             {
                     .binding = 1,  // output image

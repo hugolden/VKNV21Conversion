@@ -83,6 +83,25 @@ std::unique_ptr<Image> Image::createDeviceLocal(const VulkanContext* context, ui
     return success ? std::move(image) : nullptr;
 }
 
+void assign_sampler(VkSampler* origin, VkSampler* assignee ){
+    *origin = *assignee;
+}
+
+std::unique_ptr<Image> Image::createYUVDeviceLocal(const VulkanContext *context, VkSampler sampler,VkSamplerYcbcrConversionInfo conversion,
+                                                   uint32_t width, uint32_t height, VkImageUsageFlags usage) {
+    auto image = std::make_unique<Image>(context, width, height);
+    assign_sampler(image->mSampler.pHandle(),&sampler);
+    image->mYuvConversionInfo = conversion;
+    bool success = image->createDeviceLocalNV21Image(usage) && image->createNV21ImageView();
+    // Sampler is only needed for sampled images.
+    if (usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+        success = success && image->createSampler();
+    }
+    return success ? std::move(image) : nullptr;
+}
+
+
+
 std::unique_ptr<Image> Image::createFromBitmap(const VulkanContext* context, JNIEnv* env,
                                                jobject bitmap) {
     // Get bitmap info
@@ -103,12 +122,27 @@ std::unique_ptr<Image> Image::createFromBitmap(const VulkanContext* context, JNI
     return success ? std::move(image) : nullptr;
 }
 
+std::unique_ptr<Image> Image::createFromNV21Buffer(const VulkanContext* context, VkSampler sampler, VkSamplerYcbcrConversionInfo conversion,uint32_t width, uint32_t height){
+    auto image =
+            Image::createYUVDeviceLocal(context,sampler, conversion, width, height,
+                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    const bool success = image != nullptr;
+    return success ? std::move(image) : nullptr;
+}
+
+bool Image::feedImageViewWithBuffer(void *nv21ptr, uint32_t width, uint32_t height) {
+    const bool success = setContentFromNV21Ptr(nv21ptr,width,height);
+    return success;
+}
+
 std::unique_ptr<Image> Image::createFromAHardwareBuffer(const VulkanContext* context,
                                                         AHardwareBuffer* buffer) {
     auto image = std::make_unique<Image>(context);
     const bool success = image->createImageFromAHardwareBuffer(buffer);
     return success ? std::move(image) : nullptr;
 }
+
 
 bool Image::createDeviceLocalImage(VkImageUsageFlags usage) {
     // Create an image
@@ -148,6 +182,44 @@ bool Image::createDeviceLocalImage(VkImageUsageFlags usage) {
     return true;
 }
 
+bool Image::createDeviceLocalNV21Image(VkImageUsageFlags usage) {
+    const VkImageCreateInfo imageCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+            .extent = {mWidth, mHeight, 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = usage,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    CALL_VK(vkCreateImage, mContext->device(), &imageCreateInfo, nullptr, mImage.pHandle());
+
+    // Allocate device memory
+    VkMemoryRequirements memoryRequirements;
+    vkGetImageMemoryRequirements(mContext->device(), mImage.handle(), &memoryRequirements);
+    const auto memoryTypeIndex = mContext->findMemoryType(memoryRequirements.memoryTypeBits,
+                                                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    RET_CHECK(memoryTypeIndex.has_value());
+    const VkMemoryAllocateInfo allocateInfo = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .allocationSize = memoryRequirements.size,
+            .memoryTypeIndex = memoryTypeIndex.value(),
+    };
+    CALL_VK(vkAllocateMemory, mContext->device(), &allocateInfo, nullptr, mMemory.pHandle());
+    vkBindImageMemory(mContext->device(), mImage.handle(), mMemory.handle(), 0);
+    return true;
+}
+
+
 bool Image::setContentFromBitmap(JNIEnv* env, jobject bitmap) {
     // Get bitmap info
     AndroidBitmapInfo info;
@@ -179,6 +251,42 @@ bool Image::setContentFromBitmap(JNIEnv* env, jobject bitmap) {
     const VkBufferImageCopy bufferImageCopy = {
             .bufferOffset = 0,
             .bufferRowLength = info.stride / 4,
+            .bufferImageHeight = mHeight,
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .imageOffset = {0, 0, 0},
+            .imageExtent = {mWidth, mHeight, 1},
+    };
+    vkCmdCopyBufferToImage(copyCommand.handle(), stagingBuffer->getBufferHandle(), mImage.handle(),
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+    RET_CHECK(mContext->endAndSubmitSingleTimeCommand(copyCommand.handle()));
+
+    // Set layout to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL to prepare for input sampler usage
+    RET_CHECK(transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+    return true;
+}
+
+bool Image::setContentFromNV21Ptr(void *nv21ptr, uint32_t width, uint32_t height) {
+    if(width != mWidth || height!=mHeight){
+        return false;
+    }
+    const uint32_t bufferSize = static_cast<const uint32_t>(width * height * 1.5);
+    auto stagingBuffer = Buffer::create(
+            mContext, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    // Copy bitmap pixels to the buffer memory
+    void* bitmapData = nullptr;
+    RET_CHECK(stagingBuffer->copyFrom(nv21ptr));
+
+    // Set layout to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL to prepare for buffer-image copy
+    RET_CHECK(transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
+
+    // Copy buffer to image
+    VulkanCommandBuffer copyCommand(mContext->device(), mContext->commandPool());
+    RET_CHECK(mContext->beginSingleTimeCommand(copyCommand.pHandle()));
+    const VkBufferImageCopy bufferImageCopy = {
+            .bufferOffset = 0,
+            .bufferRowLength = mWidth,
             .bufferImageHeight = mHeight,
             .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
             .imageOffset = {0, 0, 0},
@@ -294,6 +402,7 @@ bool Image::createSampler() {
     return true;
 }
 
+
 bool Image::createImageView() {
     const VkImageViewCreateInfo viewCreateInfo{
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -302,6 +411,27 @@ bool Image::createImageView() {
             .image = mImage.handle(),
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .components =
+                    {
+                            VK_COMPONENT_SWIZZLE_IDENTITY,
+                            VK_COMPONENT_SWIZZLE_IDENTITY,
+                            VK_COMPONENT_SWIZZLE_IDENTITY,
+                            VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
+    CALL_VK(vkCreateImageView, mContext->device(), &viewCreateInfo, nullptr, mImageView.pHandle());
+    return true;
+}
+
+bool Image::createNV21ImageView() {
+    const VkImageViewCreateInfo viewCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = &mYuvConversionInfo,
+            .flags = 0,
+            .image = mImage.handle(),
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
             .components =
                     {
                             VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -379,5 +509,6 @@ bool Image::transitionLayout(VkImageLayout newLayout) {
     RET_CHECK(mContext->endAndSubmitSingleTimeCommand(layoutCommand.handle()));
     return true;
 }
+
 
 }  // namespace sample

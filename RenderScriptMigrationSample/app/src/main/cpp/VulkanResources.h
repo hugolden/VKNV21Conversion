@@ -66,12 +66,19 @@ class Image {
     static std::unique_ptr<Image> createDeviceLocal(const VulkanContext* context, uint32_t width,
                                                     uint32_t height, VkImageUsageFlags usage);
 
+    static std::unique_ptr<Image> createYUVDeviceLocal(const VulkanContext* context,VkSampler sampler,VkSamplerYcbcrConversionInfo, uint32_t width,
+                                                    uint32_t height, VkImageUsageFlags usage);
+
     // Create a image backed by device local memory, and initialize the memory from a bitmap image.
     // The image is created with usage VK_IMAGE_USAGE_TRANSFER_DST_BIT and
     // VK_IMAGE_USAGE_SAMPLED_BIT as an input of compute shader. The layout is set to
     // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL after the creation.
     static std::unique_ptr<Image> createFromBitmap(const VulkanContext* context, JNIEnv* env,
                                                    jobject bitmap);
+
+
+    static std::unique_ptr<Image> createFromNV21Buffer(const VulkanContext* context,VkSampler sampler,VkSamplerYcbcrConversionInfo conversion,
+                                                uint32_t width, uint32_t height);
 
     // Create a image backed by the given AHardwareBuffer. The image will keep a reference to the
     // AHardwareBuffer so that callers can safely close buffer.
@@ -82,6 +89,8 @@ class Image {
 
     // Prefer static factory methods
     Image(const VulkanContext* context) : Image(context, 0u, 0u) {}
+
+
     Image(const VulkanContext* context, uint32_t width, uint32_t height)
         : mContext(context),
           mWidth(width),
@@ -90,7 +99,6 @@ class Image {
           mMemory(context->device()),
           mSampler(context->device()),
           mImageView(context->device()) {}
-
     ~Image() {
         if (mBuffer != nullptr) {
             AHardwareBuffer_release(mBuffer);
@@ -98,7 +106,9 @@ class Image {
     }
 
     uint32_t width() const { return mWidth; }
+
     uint32_t height() const { return mHeight; }
+    bool feedImageViewWithBuffer(void* nv21ptr,uint32_t width, uint32_t height);
     VkImage getImageHandle() const { return mImage.handle(); }
     AHardwareBuffer* getAHardwareBuffer() { return mBuffer; }
     VkDescriptorImageInfo getDescriptor() const {
@@ -113,14 +123,20 @@ class Image {
 
    private:
     // Initialization
+
+
     bool createDeviceLocalImage(VkImageUsageFlags usage);
+    bool createDeviceLocalNV21Image(VkImageUsageFlags usage);
     bool createImageFromAHardwareBuffer(AHardwareBuffer* buffer);
     bool createSampler();
     bool createImageView();
+    bool createNV21ImageView();
 
     // Copy the bitmap pixels to the image device memory. The image must be created with
     // VK_IMAGE_USAGE_TRANSFER_DST_BIT.
     bool setContentFromBitmap(JNIEnv* env, jobject bitmap);
+
+    bool setContentFromNV21Ptr(void* nv21ptr, uint32_t width, uint32_t height);
 
     // Change the image layout from mLayout to newLayout.
     bool transitionLayout(VkImageLayout newLayout);
@@ -141,6 +157,7 @@ class Image {
     VulkanSampler mSampler;
     VulkanImageView mImageView;
     VkImageLayout mLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkSamplerYcbcrConversionInfo mYuvConversionInfo;
 };
 
 }  // namespace sample

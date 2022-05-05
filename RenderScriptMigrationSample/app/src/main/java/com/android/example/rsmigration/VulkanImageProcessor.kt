@@ -49,6 +49,20 @@ class VulkanImageProcessor(context: Context) : ImageProcessor {
         numberOfOutputImages: Int
     ): Boolean
 
+    private external fun configureNV21InputAndOutput(
+        processor: Long,
+        width:Int,
+        height:Int,
+        numberOfOutputImages: Int,
+    ): Boolean
+
+    private external fun feedNV21Input(
+        processor: Long,
+        nv21Buffer: ByteArray,
+        width:Int,
+        height:Int,
+    ): Boolean
+
     // Get the HardwareBuffer of the target output. This method must be invoked after
     // configureInputAndOutput, and index must be within [0, numberOfOutputImages).
     // Return null if failed.
