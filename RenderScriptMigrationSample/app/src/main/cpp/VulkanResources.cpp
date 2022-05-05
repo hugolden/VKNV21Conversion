@@ -203,19 +203,77 @@ bool Image::createDeviceLocalNV21Image(VkImageUsageFlags usage) {
     CALL_VK(vkCreateImage, mContext->device(), &imageCreateInfo, nullptr, mImage.pHandle());
 
     // Allocate device memory
+    VkImagePlaneMemoryRequirementsInfo image_plane_info = {};
+    image_plane_info.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO;
+    image_plane_info.pNext = nullptr;
+    image_plane_info.planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT;
+    VkImageMemoryRequirementsInfo2 image_info2 = {};
+    image_info2.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+    image_info2.pNext = &image_plane_info;
+    image_info2.image = mImage.handle();
+
+    VkImagePlaneMemoryRequirementsInfo memory_plane_requirements = {};
+    memory_plane_requirements.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO;
+    memory_plane_requirements.pNext = nullptr;
+    memory_plane_requirements.planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT;
+
+    VkMemoryRequirements2 memory_requirements2 = {};
+    memory_requirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    memory_requirements2.pNext = &memory_plane_requirements;
+    vkGetImageMemoryRequirements2(mContext->device(), &image_info2, &memory_requirements2);
+    VkDeviceSize image_size = memory_requirements2.memoryRequirements.size;
+    uint32_t image_bits = memory_requirements2.memoryRequirements.memoryTypeBits;
+
+    VkDeviceSize memory_offset_plane0, memory_offset_plane1;
+    //Set offsets
+    memory_offset_plane0 = 0;
+    memory_offset_plane1 = image_size;
+//Plane 1
+    image_plane_info.planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT;
+    memory_plane_requirements.planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT;
+    vkGetImageMemoryRequirements2(mContext->device(), &image_info2, &memory_requirements2);
+    image_size += memory_requirements2.memoryRequirements.size;
+    image_bits = image_bits | memory_requirements2.memoryRequirements.memoryTypeBits;
+
+
     VkMemoryRequirements memoryRequirements;
     vkGetImageMemoryRequirements(mContext->device(), mImage.handle(), &memoryRequirements);
-    const auto memoryTypeIndex = mContext->findMemoryType(memoryRequirements.memoryTypeBits,
+    const auto memoryTypeIndex = mContext->findMemoryType(image_bits,
                                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     RET_CHECK(memoryTypeIndex.has_value());
     const VkMemoryAllocateInfo allocateInfo = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
             .pNext = nullptr,
-            .allocationSize = memoryRequirements.size,
+            .allocationSize = image_size,
             .memoryTypeIndex = memoryTypeIndex.value(),
     };
     CALL_VK(vkAllocateMemory, mContext->device(), &allocateInfo, nullptr, mMemory.pHandle());
-    vkBindImageMemory(mContext->device(), mImage.handle(), mMemory.handle(), 0);
+
+    std::vector<VkBindImageMemoryInfo> bind_image_memory_infos(2);
+
+    VkBindImagePlaneMemoryInfo bind_image_plane0_info = {};
+    bind_image_plane0_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
+    bind_image_plane0_info.pNext = nullptr;
+    bind_image_plane0_info.planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT;
+    VkBindImageMemoryInfo& bind_image_memory_plane0_info = bind_image_memory_infos[0];
+    bind_image_memory_plane0_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+    bind_image_memory_plane0_info.pNext = &bind_image_plane0_info;
+    bind_image_memory_plane0_info.image = mImage.handle();
+    bind_image_memory_plane0_info.memory = mMemory.handle();
+    bind_image_memory_plane0_info.memoryOffset = memory_offset_plane0;
+//Plane 1
+    VkBindImagePlaneMemoryInfo bind_image_plane1_info = {};
+    bind_image_plane1_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
+    bind_image_plane1_info.pNext = nullptr;
+    bind_image_plane1_info.planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT;
+    VkBindImageMemoryInfo& bind_image_memory_plane1_info = bind_image_memory_infos[1];
+    bind_image_memory_plane1_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+    bind_image_memory_plane1_info.pNext = &bind_image_plane1_info;
+    bind_image_memory_plane1_info.image = mImage.handle();
+    bind_image_memory_plane1_info.memory = mMemory.handle();
+    bind_image_memory_plane1_info.memoryOffset = memory_offset_plane1;
+
+    vkBindImageMemory2(mContext->device(), bind_image_memory_infos.size(), bind_image_memory_infos.data());
     return true;
 }
 
@@ -292,8 +350,29 @@ bool Image::setContentFromNV21Ptr(void *nv21ptr, uint32_t width, uint32_t height
             .imageOffset = {0, 0, 0},
             .imageExtent = {mWidth, mHeight, 1},
     };
+
+    std::vector<VkBufferImageCopy> plane_regions(2);
+    plane_regions[0].bufferOffset = 0;
+    plane_regions[0].bufferRowLength = 0;
+    plane_regions[0].bufferImageHeight = 0;
+    plane_regions[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT;
+    plane_regions[0].imageSubresource.mipLevel = 0;
+    plane_regions[0].imageSubresource.baseArrayLayer = 0;
+    plane_regions[0].imageSubresource.layerCount = 1;
+    plane_regions[0].imageOffset = { 0, 0, 0 };
+    plane_regions[0].imageExtent = { width, height, 1 };
+    plane_regions[1].bufferOffset = width*height;
+    plane_regions[1].bufferRowLength = 0;
+    plane_regions[1].bufferImageHeight = 0;
+    plane_regions[1].imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
+    plane_regions[1].imageSubresource.mipLevel = 0;
+    plane_regions[1].imageSubresource.baseArrayLayer = 0;
+    plane_regions[1].imageSubresource.layerCount = 1;
+    plane_regions[1].imageOffset = { 0, 0, 0 };
+    plane_regions[1].imageExtent = { width / 2, height / 2, 1 };
+
     vkCmdCopyBufferToImage(copyCommand.handle(), stagingBuffer->getBufferHandle(), mImage.handle(),
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, plane_regions.size(), plane_regions.data());
     RET_CHECK(mContext->endAndSubmitSingleTimeCommand(copyCommand.handle()));
 
     // Set layout to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL to prepare for input sampler usage
