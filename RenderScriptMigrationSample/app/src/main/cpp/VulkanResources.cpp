@@ -185,20 +185,19 @@ bool Image::createDeviceLocalImage(VkImageUsageFlags usage) {
 bool Image::createDeviceLocalNV21Image(VkImageUsageFlags usage) {
     const VkImageCreateInfo imageCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
+            .flags = VK_IMAGE_CREATE_DISJOINT_BIT,
             .imageType = VK_IMAGE_TYPE_2D,
-            .format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+            .format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR,
             .extent = {mWidth, mHeight, 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .tiling = VK_IMAGE_TILING_LINEAR,
             .usage = usage,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 0,
             .pQueueFamilyIndices = nullptr,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED,
     };
     CALL_VK(vkCreateImage, mContext->device(), &imageCreateInfo, nullptr, mImage.pHandle());
 
@@ -236,8 +235,6 @@ bool Image::createDeviceLocalNV21Image(VkImageUsageFlags usage) {
     image_bits = image_bits | memory_requirements2.memoryRequirements.memoryTypeBits;
 
 
-    VkMemoryRequirements memoryRequirements;
-    vkGetImageMemoryRequirements(mContext->device(), mImage.handle(), &memoryRequirements);
     const auto memoryTypeIndex = mContext->findMemoryType(image_bits,
                                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     RET_CHECK(memoryTypeIndex.has_value());
@@ -333,7 +330,6 @@ bool Image::setContentFromNV21Ptr(void *nv21ptr, uint32_t width, uint32_t height
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     // Copy bitmap pixels to the buffer memory
-    void* bitmapData = nullptr;
     RET_CHECK(stagingBuffer->copyFrom(nv21ptr));
 
     // Set layout to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL to prepare for buffer-image copy
@@ -342,14 +338,6 @@ bool Image::setContentFromNV21Ptr(void *nv21ptr, uint32_t width, uint32_t height
     // Copy buffer to image
     VulkanCommandBuffer copyCommand(mContext->device(), mContext->commandPool());
     RET_CHECK(mContext->beginSingleTimeCommand(copyCommand.pHandle()));
-    const VkBufferImageCopy bufferImageCopy = {
-            .bufferOffset = 0,
-            .bufferRowLength = mWidth,
-            .bufferImageHeight = mHeight,
-            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-            .imageOffset = {0, 0, 0},
-            .imageExtent = {mWidth, mHeight, 1},
-    };
 
     std::vector<VkBufferImageCopy> plane_regions(2);
     plane_regions[0].bufferOffset = 0;
@@ -510,7 +498,7 @@ bool Image::createNV21ImageView() {
             .flags = 0,
             .image = mImage.handle(),
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+            .format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR,
             .components =
                     {
                             VK_COMPONENT_SWIZZLE_IDENTITY,

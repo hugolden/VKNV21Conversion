@@ -109,19 +109,19 @@ bool ImageProcessor::initialize(bool enableDebug, AAssetManager* assetManager) {
                                     0,false,true);
     RET_CHECK(mNV21TransitionPipeline != nullptr);
 
-    // Create two compute pipelines for blur
-    mBlurUniformBuffer = Buffer::create(
-            mContext.get(), sizeof(mBlurData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    RET_CHECK(mBlurUniformBuffer != nullptr);
-    mBlurHorizontalPipeline =
-            ComputePipeline::create(mContext.get(), "shaders/BlurHorizontal.comp.spv", assetManager,
-                                    sizeof(int32_t), /*useUniformBuffer=*/true);
-    RET_CHECK(mBlurHorizontalPipeline != nullptr);
-    mBlurVerticalPipeline =
-            ComputePipeline::create(mContext.get(), "shaders/BlurVertical.comp.spv", assetManager,
-                                    sizeof(int32_t), /*useUniformBuffer=*/true);
-    RET_CHECK(mBlurVerticalPipeline != nullptr);
+//    // Create two compute pipelines for blur
+//    mBlurUniformBuffer = Buffer::create(
+//            mContext.get(), sizeof(mBlurData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+//            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+//    RET_CHECK(mBlurUniformBuffer != nullptr);
+//    mBlurHorizontalPipeline =
+//            ComputePipeline::create(mContext.get(), "shaders/BlurHorizontal.comp.spv", assetManager,
+//                                    sizeof(int32_t), /*useUniformBuffer=*/true);
+//    RET_CHECK(mBlurHorizontalPipeline != nullptr);
+//    mBlurVerticalPipeline =
+//            ComputePipeline::create(mContext.get(), "shaders/BlurVertical.comp.spv", assetManager,
+//                                    sizeof(int32_t), /*useUniformBuffer=*/true);
+//    RET_CHECK(mBlurVerticalPipeline != nullptr);
     return true;
 }
 

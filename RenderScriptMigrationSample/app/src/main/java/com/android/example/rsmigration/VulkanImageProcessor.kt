@@ -92,6 +92,19 @@ class VulkanImageProcessor(context: Context) : ImageProcessor {
         }
     }
 
+    fun configureNV21InputAndOutput(width:Int,height:Int ,numberOfOutputImages: Int) {
+        val success = configureNV21InputAndOutput(mVulkanProcessor,width,height, numberOfOutputImages)
+        if (!success) throw RuntimeException("Failed to configureInputAndOutput")
+        mOutputImages = Array(numberOfOutputImages) { i ->
+            val buffer = getOutputHardwareBuffer(mVulkanProcessor, i)
+                ?: throw RuntimeException("Failed to getOutputHardwareBuffer at index $i")
+            val outputImage = Bitmap.wrapHardwareBuffer(buffer, null)
+                ?: throw RuntimeException("Failed to wrapHardwareBuffer at index $i")
+            buffer.close()
+            outputImage
+        }
+    }
+
     override fun rotateHue(radian: Float, outputIndex: Int): Bitmap {
         val success = rotateHue(mVulkanProcessor, radian, outputIndex)
         if (!success) throw RuntimeException("Failed to rotateHue")

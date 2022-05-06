@@ -98,7 +98,7 @@ bool ComputePipeline::createYuvConversion() {
     // Can also use IDENTITY which lets you sample the raw YUV and
     // do the conversion in shader code.
     // At least you don't have to hit the texture unit 3 times.
-    info.ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
+    info.ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601;
 
     // TV (NARROW) or PC (FULL) range for YUV?
     // Usually, JPEG uses full range and broadcast content is narrow.
@@ -121,14 +121,14 @@ bool ComputePipeline::createYuvConversion() {
 
     // COSITED or MIDPOINT? I think normal YUV420p content is MIDPOINT,
     // but not quite sure ...
-    info.xChromaOffset = VK_CHROMA_LOCATION_MIDPOINT;
-    info.yChromaOffset = VK_CHROMA_LOCATION_MIDPOINT;
+    info.xChromaOffset = VK_CHROMA_LOCATION_COSITED_EVEN;
+    info.yChromaOffset = VK_CHROMA_LOCATION_COSITED_EVEN;
 
     // Not sure what this is for.
     info.forceExplicitReconstruction = VK_FALSE;
 
     // For YUV420p.
-    info.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+    info.format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM_KHR;
 
     VkSamplerYcbcrConversion conversion;
     CALL_VK(vkCreateSamplerYcbcrConversion,mContext->device(), &info, nullptr,
@@ -153,9 +153,9 @@ bool ComputePipeline::createNV21Sampler() {
     const VkSamplerCreateInfo samplerCreateInfo{
             .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
             .pNext = &mYuvConversionInfo,
-            .magFilter = VK_FILTER_NEAREST,
-            .minFilter = VK_FILTER_NEAREST,
-            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
             // Use clamp to edge for BLUR filter
             .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -166,7 +166,7 @@ bool ComputePipeline::createNV21Sampler() {
             .compareEnable = VK_FALSE,
             .compareOp = VK_COMPARE_OP_NEVER,
             .minLod = 0.0f,
-            .maxLod = 0.0f,
+            .maxLod = 1.0f,
             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
             // Use unnormalized coordinates to avoid the need of normalization
             // when indexing into the texture
