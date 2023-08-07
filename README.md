@@ -2,7 +2,7 @@
 
 As no available NV21 conversion can be found on internet, I tried to implement it on myself and published it here.
 
-Conversion can be found -[here](./RenderScriptMigrationSample/app/src/main/cpp/NV21Converter.cpp)
+Conversion can be found [here](./RenderScriptMigrationSample/app/src/main/cpp/NV21Converter.cpp)
 
 Native interface is also available.
 
