@@ -1,5 +1,19 @@
 # NV21 Conversion is implemented in this project. 
 
+As no available NV21 conversion can be found on internet, I tried to implement it on myself and published it here.
+
+Conversion can be found -[here](./RenderScriptMigrationSample/app/src/main/cpp/NV21Converter.cpp)
+
+Native interface is also available.
+
+Hope this project is helpful to you
+
+The latter part comes from Google open source project
+
+---
+
+
+
 # Android Renderscript Samples
 
 This repository contains a set of individual Android Studio projects:
